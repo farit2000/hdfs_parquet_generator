@@ -4,6 +4,7 @@
 venv/
 .idea/
 .vscode/
+bin/
 
 
 # User-specific stuff

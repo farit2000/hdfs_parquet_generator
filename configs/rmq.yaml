@@ -10,7 +10,7 @@ servers:
     username: rabbit
     password: 1sd12fcxf34k
   rabbitmq-3:
-    host: 185.104.107.29
+    host: 10.100.200.8
     port: 5672
-    username: farit
-    password: sH0hF2qD6ebF
+    username: rabbit
+    password: 1sd12fcxf34k

@@ -21,8 +21,9 @@ func main() {
 	rmqConn, rmqChannel := rmqConf.GetRMQConnAndChannel()
 
 	defer func() {
-		hdfsClient.Close()
 		stop()
+		hdfsClient.Close()
+		rmqConn.Close()
 	}()
 
 	c := consumer.Consumer{

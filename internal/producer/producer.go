@@ -68,7 +68,7 @@ func (producer *Producer) Produce(ctx context.Context) error {
 			default:
 				wg.Add(1)
 				go sendToRabbitMQContext(&wg, producer.RmqChannel)
-				time.Sleep(time.Duration(1) * time.Second)
+				time.Sleep(time.Duration(10) * time.Millisecond)
 			}
 		}
 	}()

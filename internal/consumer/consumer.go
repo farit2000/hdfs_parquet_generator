@@ -1,7 +1,9 @@
 package consumer
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"github.com/colinmarc/hdfs"
 	"github.com/farit2000/hdfs_parquet_generator/internal/pkg"
 	"github.com/streadway/amqp"
@@ -14,6 +16,20 @@ type Consumer struct {
 	RmqConn    *amqp.Connection
 	RmqChannel *amqp.Channel
 	HdfsClient *hdfs.Client
+}
+
+func writeParquetFile(buff *bytes.Buffer, pw *writer.ParquetWriter, hdfsClient *hdfs.Client, fileNum int) {
+	err := pw.WriteStop()
+	pkg.FailOnError(err, "Error while write stop parquet writer")
+	w, err := hdfsClient.Create(fmt.Sprintf("/user/hive/warehouse/parquets/randJson%d.parquet", fileNum))
+	defer func() {
+		w.Close()
+		buff.Reset()
+	}()
+
+	pkg.FailOnError(err, "Error while create parquet file")
+	count, err := w.Write(buff.Bytes())
+	log.Printf("Writed %d", count)
 }
 
 func readFromRabbitAndSendToParquetFileHDFS(ctx context.Context, rmqChannel *amqp.Channel, hdfsClient *hdfs.Client) {
@@ -38,31 +54,33 @@ func readFromRabbitAndSendToParquetFileHDFS(ctx context.Context, rmqChannel *amq
 	)
 	pkg.FailOnError(err, "Failed to register a consumer")
 
-	w, err := hdfsClient.Create("/user/hive/warehouse/parquets/randJson.parquet")
-	pkg.FailOnError(err, "Error while create parquet file")
+	var buff bytes.Buffer
 
-	pw, err := writer.NewParquetWriterFromWriter(w, new(pkg.RandomJsonStruct), 4)
+	pw, err := writer.NewParquetWriterFromWriter(&buff, new(pkg.RandomJsonStruct), 4)
 	pkg.FailOnError(err, "Error while create new parquet writer")
 	pw.RowGroupSize = 128 * 1024 * 1024 //128M
 	pw.CompressionType = parquet.CompressionCodec_SNAPPY
 
-	defer func() {
-		w.Close()
-	}()
-
 	var jsonStruct pkg.RandomJsonStruct
-
+	i := 0
+	fileNum := 0
 	go func() {
 		for d := range msgs {
 			err = pw.Write(jsonStruct.Unmarshal(d.Body))
 			pkg.FailOnError(err, "Error while writing to file")
 			log.Printf("Received a message: %d", jsonStruct.Unmarshal(d.Body).Id)
+			i++
+			log.Println(i)
+			if i == 50000 {
+				writeParquetFile(&buff, pw, hdfsClient, fileNum)
+				fileNum++
+				i = 0
+			}
 		}
 	}()
 
 	<-ctx.Done()
-	err = pw.WriteStop()
-	pkg.FailOnError(err, "Error while write stop parquet writer")
+	writeParquetFile(&buff, pw, hdfsClient, fileNum)
 	log.Println("Consume stop")
 }
 
